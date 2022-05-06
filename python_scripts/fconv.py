@@ -1,5 +1,6 @@
 '''
-test
+A script to covert between sequence formats
+Relies on Biopython
 '''
 
 import sys
@@ -43,7 +44,7 @@ def parse_files(files, option, extlen,
                 inputformat, outputfolder,
                 outputformat, outputext):
     '''
-    test
+    Parses files, converts, writes output
     '''
     count = 0
     for absfile in files:
