@@ -5,6 +5,7 @@ FORMAT: python split_fasta.py [file name]
 EXAMPLE: python split_fasta.py ./fasta.fas
 '''
 import sys
+import logging
 from Bio import SeqIO
 
 
@@ -15,16 +16,18 @@ def parse_fasta(fname):
     with open(fname, "rU") as fhandle:
         seqs = SeqIO.parse(fhandle, "fasta")
         for seq in seqs:
-            print("processing", seq.id)
+            logging.info("processing "+seq.id)
             with open(seq.id+".fas", "a") as fnew:
                 SeqIO.write(seq, fnew, "fasta")
-    print("done")
+    logging.info("done")
 
 
 def main():
     '''
     The main function
     '''
+    logging.basicConfig(format='%(asctime)s | %(message)s',
+                        level=logging.NOTSET)
     if len(sys.argv) == 2:
         fname = sys.argv[1]
         parse_fasta(fname)
