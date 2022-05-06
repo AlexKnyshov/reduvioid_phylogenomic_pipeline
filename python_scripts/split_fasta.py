@@ -16,7 +16,7 @@ def parse_fasta(fname):
     with open(fname, "rU") as fhandle:
         seqs = SeqIO.parse(fhandle, "fasta")
         for seq in seqs:
-            logging.info("processing "+seq.id)
+            logging.info("processing %s", seq.id)
             with open(seq.id+".fas", "a") as fnew:
                 SeqIO.write(seq, fnew, "fasta")
     logging.info("done")
