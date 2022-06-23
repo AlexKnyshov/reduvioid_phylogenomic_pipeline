@@ -269,7 +269,7 @@ def parse_and_concatenate(inputfolder, partnum):
         fformat = extension_to_format(extension)
         if fformat == "ss":
             matrix = ss_parser(infile)
-            length = len(matrix.values()[0])
+            length = len(list(matrix.values())[0])
             model = "MULTI"
             for rec in matrix:
                 if rec not in final_matrix:
