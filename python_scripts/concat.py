@@ -51,7 +51,11 @@ def ss_parser(filename):
             line = line.strip()
             if line == ";":
                 break
-            output[line.split(" ")[0]] = line.split(" ")[-1]
+            if "\t" in line:
+                delim = "\t"
+            else:
+                delim = " "
+            output[line.split(delim)[0]] = line.split(delim)[-1]
     return output
 
 
