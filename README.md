@@ -4,7 +4,7 @@ Phylogenomic filtering pipeline related to the manuscript
 TBA
 ```
 
-##Contents
+## Contents
 
 * [Bait sequence preparation (AHE)](https://github.com/AlexKnyshov/reduvioid_phylogenomic_pipeline/tree/master/baitAHE)
 * [Locus compiling and filtering pipeline (AHE)](https://github.com/AlexKnyshov/reduvioid_phylogenomic_pipeline/tree/master/pipelineAHE)
