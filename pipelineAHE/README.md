@@ -11,6 +11,7 @@ alibaseq_folder=""
 blast=""
 raxml=""
 iqtree=""
+macseFolder=""
 Nthreads=""
 baitfolderCDS=""
 baitfolderAA=""
@@ -89,6 +90,7 @@ This approach was inspired by https://github.com/damurdock/SIDR
 While the original approach of inferring unknown contaminants did not work for our data, the part to identify known contaminants worked well. For that, megablast is run against NCBI and taxon ids of matches are recorded
 ```
 mkdir megaGout
+
 blastn \
 	-task megablast \
 	-query ./alibaseq_outGens/$sample \
@@ -112,10 +114,10 @@ python ${repo_folder}/python_scripts/parsedecontblast.py rankedlineage.dmp megaG
 In order to save time, instead of removing contaminants from assemblies and redoing the search, original blast files from step 1 are filtered
 ```
 mkdir decontblastG
+
 for f in blastG/*.blast
 do
-	fname=$(echo $f | rev | cut -f1 -d/ | rev)
-	echo $fname
+	fname=$(basename ${f})
 	grep -v -f "megaGout/"$fname"_decont_out.txt" $f > "decontblastG/"$fname
 done
 ```
@@ -124,7 +126,7 @@ done
 ## 3. Run reciprocal search
 Output (decontaminated) blast tables are used to check all contigs with matches against the reference transcriptome for a reciprocal best hit (RBH) check which greatly improves orthology prediction accuracy.
 ```
-echo "transcriptomes"
+#transcriptomes
 bash ${alibaseq_folder}/reciprocal_search.sh \
 	./blastT/ \
 	${transcriptomicAssembliesFolder}/ \
@@ -135,7 +137,7 @@ bash ${alibaseq_folder}/reciprocal_search.sh \
 	${alibaseq_folder}/reciprocal_get_contigs.py \
 	${transcriptomicSampleList}
 
-echo "genomes"
+#genomes
 bash ${alibaseq_folder}/reciprocal_search.sh \
 	./decontblastG/ \
 	${genomicAssembliesFolder}/ \
@@ -145,17 +147,17 @@ bash ${alibaseq_folder}/reciprocal_search.sh \
 	y \
 	${alibaseq_folder}/reciprocal_get_contigs.py \
 	${genomicSampleList}
-
-
 ```
-For large, chromosome-level assemblies, the contigs are too large, so to speed up the search and lower memory requirements, chromosomes are chunked into smaller pieces that are then blasted.
+For large chromosome-level assemblies, the contigs are too large, so to speed up the search and lower memory requirements, chromosomes are chunked into smaller pieces that are then blasted. Each sample was submitted as its own job on our compute cluster.
 ```
+#ref genomes
 bash ${repo_folder}/TBA/reciprocal_chunky_search.sh \
 	${referenceAssembliesFolder}/$sample \
 	${reciprocalReference} \
 	dc-megablast \
 	${Nthreads} \
-	${repo_folder}/TBA/chunkify.py y
+	${repo_folder}/TBA/chunkify.py \
+	y
 ```
 
 
@@ -236,18 +238,25 @@ echo "debug set up" > ../exoner_debug.txt
 
 for x in $(ls ../gens_out_b_is/*.fas)
 do
-	echo "get the reference" $x
+	#get the reference
 	echo $x >> ../exoner_debug.txt
-	refname=${baitfolderAA}"/"$(echo $x | rev | cut -d/ -f1 | rev)
-	echo "reference" $refname
-	echo "splitting" $x
+	refname=${baitfolderAA}"/"$(basename ${x})
+	#splitting
 	python ${repo_folder}/python_scripts/split_fasta.py $x
 	for f in *
 	do
-		echo "running exonerate on" $f
-		exonerate --model protein2genome -q $refname -t $f -E -n 1 --showalignment false --showvulgar false --verbose 0 --ryo ">%ti\n%tcs" 1> ../exoner_concat/$f 2>> ../exoner_debug.txt
+		exonerate \
+			--model protein2genome \
+			-q $refname \
+			-t $f \
+			-E \
+			-n 1 \
+			--showalignment false \
+			--showvulgar false \
+			--verbose 0 \
+			--ryo ">%ti\n%tcs" 1> ../exoner_concat/$f 2>> ../exoner_debug.txt
 	done
-	cat ../exoner_concat/* > ../exoner_out/$(echo $x | rev | cut -d/ -f1 | rev)
+	cat ../exoner_concat/* > ../exoner_out/$(basename ${x})
 	rm *
 	rm ../exoner_concat/*
 done
@@ -273,10 +282,15 @@ Align translated alignments. The value of --unalignlevel was determined empirica
 ```
 ## align proteins
 mkdir realignedAA
+
 for f in translated1/*
 do
-	outf=$(echo $f | rev | cut -f1 -d/ | rev)
-	mafft --globalpair --thread ${Nthreads} --unalignlevel 0.8 $f > realignedAA/$outf
+	outf=$(basename ${f})
+	mafft \
+		--globalpair \
+		--thread ${Nthreads} \
+		--unalignlevel 0.8 \
+		$f > realignedAA/$outf
 done
 ```
 
@@ -286,12 +300,13 @@ CDS of loci were aligned based on AA using MACSE
 ```
 ## align NT
 mkdir realignedNT
+
 for f in realignedAA/*
 do
 	sample=$(echo $f | rev | cut -d/ -f1 | rev)
 	java \
 		-Xmx7g \
-		-jar ~/tools/macse_v2.03.jar \
+		-jar ${macseFolder}/macse_v2.03.jar \
 		-prog reportGapsAA2NT \
 		-align_AA $f \
 		-seq nt_translator/$sample \
@@ -304,22 +319,28 @@ done
 ### 6.3. Alignment block trimming
 A custom script was used to do per position trimming of AA alignments at 40% missing data or less, removing sequences with less than 10% data. Then samples that were completely removed from AA were also removed from NT using a custom script, and MACSE was used to mask the remaining CDS. Since MACSE does additional base masking (isolated bases), AA alignment is no longer in sync with CDS after this. So after MACSE trimmed CDS, these files were translated to create new AA files.
 ```
-## trim
+## trim AA alignments
 python ${repo_folder}/python_scripts/customtrim.py \
 	./realignedAA/ \
 	-d prot
 mv trimmed trimmedAA
+
+
+#remove completely trimmed out taxa
 python ${repo_folder}/python_scripts/removeTaxa.py \
 	./realignedNT/ \
 	-m ./trimmedAA/
 mv rmtaxaout realignedNTeq
+
+
+#run MACSE to trim NT based on AA
 mkdir trimmedNT
 for f in realignedNTeq/*
 do
 	sample=$(echo $f | rev | cut -d/ -f1 | rev)
 	java \
 		-Xmx7g \
-		-jar ~/tools/macse_v2.03.jar \
+		-jar ${macseFolder}/macse_v2.03.jar \
 		-prog reportMaskAA2NT \
 		-align_AA "trimmedAA/"$sample"_masked" \
 		-align $f \
@@ -329,14 +350,15 @@ do
 		-dist_isolate_AA 4
 done
 
-## translate NT
+
+## translate NT to obtain new AA
 python ${repo_folder}/python_scripts/translator.py ./trimmedNT/ -t 1.0
 ```
 
 ### 6.4. Remove flanking sequence artefacts
 As previous steps were not sensitive enough to remove flanking artefactual sites, a custom end-trimming script was used to mask such sites. MACSE was then run to trim these sites in these sequences, followed by translation to obtain a new set of CDS and AA sequences.
 ```
-#end trimming
+#end trimming based on AA alignments
 mv translated trimmedNT_translated
 
 for f in trimmedNT_translated/*.fas
@@ -345,16 +367,16 @@ do
 	python ${repo_folder}/endbite.py $f
 done
 
-# mask NT again and retranslate
+# mask NT using AA as template and
+# translate to get new AA
 
 mkdir trimmedNTa
-
 for f in trimmedNT/*.fas
 do
 	sample=$(echo $f | rev | cut -d/ -f1 | rev)
 	java \
 		-Xmx7g \
-		-jar ~/tools/macse_v2.03.jar \
+		-jar ${macseFolder}/macse_v2.03.jar \
 		-prog reportMaskAA2NT \
 		-align_AA "trimmedNT_translated/"$sample".masked" \
 		-align $f \
@@ -379,7 +401,7 @@ ls trimmedNTa_translated/ > gt_filt/locilist.txt
 date
 
 ```
-Run RAxML as an array job on the list of files
+RAxML was run as an array job on the list of files to efficiently parallelize on many small files
 ```
 ${raxml} \
 	-T 8 \
@@ -395,14 +417,14 @@ ${raxml} \
 
 
 ### 7.2. Run long branch trimmer
-Removes long branch outliers (over 50 times mean edge length, parameter determined empirically)
+Removes long branch outliers (over 50 times mean edge length, parameter determined empirically). Run twice to trim both NT and AA files.
 ```
 > lbfilt_AA.log
 for f in trimmedNTa_translated/*.fas
 do
 	echo $f
-	Rscript ${repo_folder}/TBA/lbfilter.R \
-		"gt_filt/RAxML_bipartitions."$(echo $f | rev | cut -f1 -d/ | rev) \
+	Rscript ${repo_folder}/R_scripts/lbfilter.R \
+		"gt_filt/RAxML_bipartitions."$(basename ${f}) \
 		$f \
 		prot \
 		50 >> lbfilt_AA.log
@@ -412,93 +434,102 @@ done
 for f in trimmedNTa/*.fas
 do
 	echo $f
-	Rscript ${repo_folder}/TBA/lbfilter.R \
-		"gt_filt/RAxML_bipartitions."$(echo $f | rev | cut -f1 -d/ | rev) \
+	Rscript ${repo_folder}/R_scripts/lbfilter.R \
+		"gt_filt/RAxML_bipartitions."$(basename ${f}) \
 		$f \
 		dna \
 		50 >> lbfilt_NT.log
 done
 
+
+#move edited files to new location
+
 mkdir gtfilt_trimmedNT_translated
 for f in trimmedNTa_translated/*.edited
 do
-	mv $f ./gtfilt_trimmedNT_translated/$(echo $f | rev | cut -f1 -d/ | rev | cut -f1-2 -d.)
+	mv $f ./gtfilt_trimmedNT_translated/$(basename ${f} | cut -f1-2 -d.)
 done
 
 mkdir gtfilt_trimmedNT
 for f in trimmedNTa/*.edited
 do
-	mv $f ./gtfilt_trimmedNT/$(echo $f | rev | cut -f1 -d/ | rev | cut -f1-2 -d.)
+	mv $f ./gtfilt_trimmedNT/$(basename ${f} | cut -f1-2 -d.)
 done
 ```
 
 
 ## 8. Iterative HMMCleaner and global distance filtering
+We ran two iterations of HMMCLeaner and a custom script to remove outlier sequences from alignments. Details on the second approach are in 8.2.
 ## 8.1. Run HMMCleaner I
 ```
+#run HMMCleaner
 for f in gtfilt_trimmedNT_translated/*.fas
 do
 	echo $f
 	HmmCleaner.pl $f -v=0
 done
 
+#run transferCleaner
 for f in gtfilt_trimmedNT/*.fas
 do
-	sample=$(echo $f | rev | cut -f1 -d/ | rev | cut -f1 -d.)
+	sample=$(basename ${f} | cut -f1 -d.)
 	echo $sample
 	transferCleaner.pl $f -log="gtfilt_trimmedNT_translated/"$sample"_hmm.log"
 done
 
+#run ali2fasta
 ali2fasta.pl gtfilt_trimmedNT/*_cleaned.ali 
 
 mkdir hmmclean_gtfilt_trimmedNT_translated
 
+
+# move output files to new location
 for f in gtfilt_trimmedNT_translated/*_hmm.fasta
 do
-	mv $f hmmclean_gtfilt_trimmedNT_translated/$(echo $f | rev | cut -f1 -d/ | rev | cut -f1 -d_).fas
+	mv $f hmmclean_gtfilt_trimmedNT_translated/$(basename ${f} | cut -f1 -d_).fas
 done
 
 mkdir hmmclean_gtfilt_trimmedNT
 
 for f in gtfilt_trimmedNT/*_cleaned.fasta
 do
-	mv $f hmmclean_gtfilt_trimmedNT/$(echo $f | rev | cut -f1 -d/ | rev | cut -f1 -d_).fas
+	mv $f hmmclean_gtfilt_trimmedNT/$(basename ${f} | cut -f1 -d_).fas
 done
 ```
 
 
 ### 8.2. Trim missing data and prepare files for distance filter
 ```
+# remove seqs with only 25% data or less
 python ${repo_folder}/python_scripts/removeTaxa.py hmmclean_gtfilt_trimmedNT/ -l 0.25
-
 mv rmtaxaout hmmclean_gtfilt_trimmedNT_l025
 
+# remove loci with less than 40 samples
 python ${repo_folder}/python_scripts/removeTaxa.py hmmclean_gtfilt_trimmedNT_l025/ -ll 40
-
 mv rmtaxaout hmmclean_gtfilt_trimmedNT_l025_ll40
 
+# remove samples, removed from NT, from AA
 python ${repo_folder}/python_scripts/removeTaxa.py \
 	./hmmclean_gtfilt_trimmedNT_translated/ \
 	-m \
 	./hmmclean_gtfilt_trimmedNT_l025_ll40/
-
 mv rmtaxaout hmmclean_gtfilt_trimmedNT_translated_l025_ll40
 
+# get a concat NT matrix, no partition file needed
 python ${repo_folder}/python_scripts/concat.py hmmclean_gtfilt_trimmedNT_l025_ll40 -1
-
 mv COMBINED.phy concatNT.phy
-
 rm partitions.prt
 
+# convert to fasta (default output is phylip for phylogenetics but not appropriate for distfilter)
 python ${repo_folder}/python_scripts/fconv.py \
 	-a concatNT.phy phylip-relaxed fasta .fas
 
+# get a concat AA matrix
 python ${repo_folder}/python_scripts/concat.py hmmclean_gtfilt_trimmedNT_translated_l025_ll40 -1
-
 mv COMBINED.phy concatAA.phy
-
 rm partitions.prt
 
+# conver to fasta
 python ${repo_folder}/python_scripts/fconv.py \
 	-a \
 	concatAA.phy \
@@ -506,13 +537,14 @@ python ${repo_folder}/python_scripts/fconv.py \
 	fasta \
 	.fas
 
+# move files around
 mkdir distfilt1
-
 mv concat* distfilt1/
 ```
 
 
 ### 8.3. Run distfilter I
+Distance outliers in each locus are determined based on how average pairwise distance of a sample in a NT alignment far from average pairwise distance of a sample in a concat NT matrix. Same is checked for protein data and protein concat file. For NT raw distance was used, while for AA an ML distance under WAG was calculated. Union of outliers (outlier in NT or AA, or both) is taken and sample sequences removed from NT and AA. First pass outlier threshold settings are IRQ\*5 for the upper (distance too large compared to concat) and IRQ\*10 for the lower (distance too small compared to concat), were determined empirically.
 ```
 cd distfilt1
 
@@ -529,26 +561,26 @@ Rscript ${repo_folder}/R_scripts/distfilter.R \
 	10 \
 	rescale
 
-
-```
-
-
-### 8.4. Run HMMCleaner II
-```
 mkdir distfiltNT
 
 for f in prefiltNT/*.edited
 do
-	mv $f ./distfiltNT/$(echo $f | rev | cut -f1 -d/ | rev | cut -f1-2 -d.)
+	mv $f ./distfiltNT/$(basename ${f} | cut -f1-2 -d.)
 done
 
 mkdir distfiltAA
 
 for f in prefiltAA/*.edited
 do
-	mv $f ./distfiltAA/$(echo $f | rev | cut -f1 -d/ | rev | cut -f1-2 -d.)
+	mv $f ./distfiltAA/$(basename ${f} | cut -f1-2 -d.)
 done
 
+```
+
+
+### 8.4. Run HMMCleaner II
+Second iteration of HMMCleaner, since effect was marginal, no additional trimming of missing data was done.
+```
 for f in distfiltAA/*.fas
 do
 	echo $f
@@ -557,7 +589,7 @@ done
 
 for f in distfiltNT/*.fas
 do
-	sample=$(echo $f | rev | cut -f1 -d/ | rev | cut -f1 -d.)
+	sample=$(basename ${f} | cut -f1 -d.)
 	echo $sample
 	transferCleaner.pl $f -log="distfiltAA/"$sample"_hmm.log"
 done
@@ -568,19 +600,20 @@ mkdir hmmclean_distfiltAA
 
 for f in distfiltAA/*_hmm.fasta
 do
-	mv $f hmmclean_distfiltAA/$(echo $f | rev | cut -f1 -d/ | rev | cut -f1 -d_).fas
+	mv $f hmmclean_distfiltAA/$(basename ${f} | cut -f1 -d_).fas
 done
 
 mkdir hmmclean_distfiltNT
 
 for f in distfiltNT/*_cleaned.fasta
 do
-	mv $f hmmclean_distfiltNT/$(echo $f | rev | cut -f1 -d/ | rev | cut -f1 -d_).fas
+	mv $f hmmclean_distfiltNT/$(basename ${f} | cut -f1 -d_).fas
 done
 ```
 
 
 ### 8.5. Run distfilter II
+Second iteration of distfilter. Second pass outlier threshold settings are IRQ\*2 for the upper (distance too large compared to concat, more sensitive than in the first pass) and IRQ\*10 for the lower (distance too small compared to concat), were determined empirically.
 ```
 mkdir ../distfilt2/
 
@@ -629,20 +662,22 @@ mkdir distfiltNT
 
 for f in prefiltNT/*.edited
 do
-	mv $f ./distfiltNT/$(echo $f | rev | cut -f1 -d/ | rev | cut -f1-2 -d.)
+	mv $f ./distfiltNT/$(basename ${f} | cut -f1-2 -d.)
 done
 
 mkdir distfiltAA
 
 for f in prefiltAA/*.edited
 do
-	mv $f ./distfiltAA/$(echo $f | rev | cut -f1 -d/ | rev | cut -f1-2 -d.)
+	mv $f ./distfiltAA/$(basename ${f} | cut -f1-2 -d.)
 done
 ```
 
 
 ## 9. NT gene tree based filtering
+Several filtering steps based on NT trees
 ### 9.1. Run concat and gene tree analyses of NT alignments
+Infer gene trees using RAxML
 ```
 ${raxml} \
 	-T 8 \
@@ -655,6 +690,7 @@ ${raxml} \
 	-N 50 \
 	-s ../distfilt2/distfiltNT_la50/$(sed -n ${SLURM_ARRAY_TASK_ID}p locilist.txt)
 ```
+Concatenate all alignments and infer NT ML concat trees using IQ-TREE. Model test was done separately as (at least in early versions of IQ-TREE) missing data in outgroup caused abort during model test.
 ```
 #concat distfilter2 results
 ${iqtree} \
@@ -676,6 +712,9 @@ ${iqtree} \
 
 
 ### 9.2. Run decrosscontamination
+As opposed to a more simple algorithm in distfilter (which does check for a too small distance), cross contamination script more carefully checks for near identical sequence similarity, and tries to remove only one sequence (contaminant acceptor) if this can be inferred based on the overall ML tree. First, suspect contaminated groups of taxa are discovered based on pairwise GTR distance of less than 0.01 in a locus given a concat-based GTR distance of over 0.2 (pair is too similar to each other despite too far in the concat tree), parameter choince was determined empirically. This preserves similar sequences for several congeneric taxa in our analysis.
+
+Then we try to rescue at least one of the suspect sequences. Since gene tree error with respect to species tree can be large and a simple check of ML-based distance to the ML tree (like in distfilter) can be misleading, we instead try to drop each sequence and check if RF distance of the resulting tree to ML tree reduced. A sample which when dropped improves RF similarity more is removed. If two tests give indentical RF, both sequences are removed. 
 ```
 #collapse by support
 for f in gt_filtAn1/RAxML_bipartitions.L*
@@ -706,14 +745,14 @@ mkdir crosscontNT
 
 for f in ./distfilt2/distfiltNT_la50/*.edited
 do
-	mv $f ./crosscontNT/$(echo $f | rev | cut -f1 -d/ | rev | cut -f1-2 -d.)
+	mv $f ./crosscontNT/$(basename ${f} | cut -f1-2 -d.)
 done
 
 mkdir crosscontAA
 
 for f in ./distfilt2/distfiltAA_la50/*.edited
 do
-	mv $f ./crosscontAA/$(echo $f | rev | cut -f1 -d/ | rev | cut -f1-2 -d.)
+	mv $f ./crosscontAA/$(basename ${f} | cut -f1-2 -d.)
 done
 
 mv genetreesAn1.tre.edited genetreesAn1_crosscont.tre
@@ -721,6 +760,7 @@ mv genetreesAn1.tre.edited genetreesAn1_crosscont.tre
 
 
 ### 9.3. RF-based filtering of entire loci
+After cross contamination is addressed, updated gene trees are checked for RF distance to the concat ML distance and outlier loci (with distance over IRQ\*3) are removed.
 ```
 # run rfFilter
 Rscript ${repo_folder}/R_scripts/rfFilter.R \
