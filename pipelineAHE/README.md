@@ -3,6 +3,12 @@
 Pipeline for processing AHE data
 
 
+
+
+
+
+
+
 ## paths setup
 
 ```
@@ -559,7 +565,7 @@ Rscript ${repo_folder}/R_scripts/distfilter.R \
 	./prefiltAA/ \
 	5 \
 	10 \
-	rescale
+	WAG
 
 mkdir distfiltNT
 
@@ -656,7 +662,7 @@ Rscript ${repo_folder}/R_scripts/distfilter.R \
 	./prefiltAA/ \
 	2 \
 	10 \
-	rescale
+	WAG
 
 mkdir distfiltNT
 

@@ -517,7 +517,12 @@ Repeat step 7.1. by using similar script to get new AA-based gene trees. Replace
 ### 7.4. UPhO orthology prediction
 Since multiple sequences per taxon were pulled out from assemblies in the step 4, additional tree-based orthology inference was run to retain only single sequence per sample. Original `UPhO.py` script from https://github.com/ballesterus/UPhO was used, while other helper scripts were created as part of this pipeline. Renaming of sequences was necessary at this step to avoid incorrect processing by UPhO.
 ```
-bash ${repo_folder}/TBA/UPhO_prep_trees.sh ./gt_filt2/
+mkdir upho_trees
+for f in ./gt_filt2/RAxML_bipartitions.*
+do
+	bname=$(echo $f | rev | cut -f1,2 -d. | rev)
+	cp $f upho_trees/$bname
+done
 
 mkdir gtfilt_trimmedNT_rn
 
@@ -644,7 +649,7 @@ Rscript ${repo_folder}/R_scripts/distfilter.R \
 	./prefiltAA/ \
 	5 \
 	10 \
-	rescale
+	WAG
 
 mkdir distfiltNT
 
@@ -741,7 +746,7 @@ Rscript ${repo_folder}/R_scripts/distfilter.R \
 	./prefiltAA/ \
 	3 \
 	10 \
-	rescale
+	WAG
 
 mkdir distfiltNT
 
