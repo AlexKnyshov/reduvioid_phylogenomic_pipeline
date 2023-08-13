@@ -61,7 +61,7 @@ The order of this step could be different, but in our case, this is when we chec
 First, run BLASTX and get an output of OG proteins matched at 1e-25 e-value with 95% identity:
 ```
 # run BLASTX of AHE target regions (based on Arilus) against Arilus proteins in OGs
-# using ALiBaSeq's blast wrapper:
+# (totalprots.fas) using ALiBaSeq's blast wrapper:
 bash blast_wrapper.sh ./PATH_TO_final_ref_cds/ totalprots.fas 1e-10 blastx 12 y
 
 # run ALiBaSeq to get the list of all found proteins at a given threshold
@@ -93,7 +93,7 @@ mkdir selected_fasta
 while read l; do cp fasta/$l selected_fasta/; done < ahe_screen_selected.txt
 ```
 
-## 4. Run distance assessment script and remove OGs with large pairwise seq distance
+## 5. Run distance assessment script and remove OGs with large pairwise seq distance
 
 First, run average distance assessment R script on all alignments (ML distance under LG model):
 ```
@@ -109,7 +109,7 @@ mkdir selected_fasta2
 while read l; do cp selected_fasta/$l selected_fasta2/; done < dist_screen_selected.txt
 ```
 
-## 5. Construct HMM profiles
+## 6. Construct HMM profiles
 
 For each file in selected_fasta2 construct a hmmer profile:
 ```
@@ -119,11 +119,11 @@ for f in selected_fasta2/*; do hmmbuild --cpu 3 ./selected_fasta2_profiles/$(ech
 ```
 **Resulting hmm files in `selected_fasta2_profiles` was used for the forward HMMER search in the OrthoMCL pipeline (with the exception of reference assemblies, where the longest AA sequence in each locus was used for the forward TBLASTN search).**
 
-## 6. Obtain sequences of the reference taxon
+## 7. Obtain sequences of the reference taxon
 
 The most complete sample from the initial OrthoMCL set (Pasir = Pasiropsis sp.) was selected as a reference taxon for the RBH check
 
-### 6.1. Run collapser script to combine transcript pieces
+### 7.1. Run collapser script to combine transcript pieces
 
 This script will merge fragmentary transcripts for each taxon (if any) into a single transcript. This is most important for the reference taxon, as having most complete target region span helps the reciprocal check later on.
 ```
@@ -132,11 +132,11 @@ cd selected_fasta2_collapsed
 for f in ./selected_fasta2/*.fas; do python get_consensus.py ${f}; done
 ```
 
-### 6.2. Extract Pasir taxon sequences
+### 7.2. Extract Pasir taxon sequences
 
 Extract Pasir sequences out of collapsed sequence files from above, one sequence per file
 
-### 6.3. Run TBLASTN search of Pasir regions against Pasir transcriptome
+### 7.3. Run TBLASTN search of Pasir regions against Pasir transcriptome
 
 Assuming `EXTRACTED_PASIR_LOCI_FILES` contains Pasir only sequences, we used ALiBaSeq's blast wrapper to run TBLASTN against the corresponding transcriptome at 1e-10 e-value threshold:
 ```
