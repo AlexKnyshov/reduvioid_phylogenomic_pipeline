@@ -41,7 +41,7 @@ Combine all clustered sequences from the output of checkdist script into a singl
 
 ### 2.2. Merge loci with hits to other loci
 Now run `merge_overlapped.py` script on the subset blast result to get a list of combinations of overlapped loci, which then can be combined into new merged the locus files.
-Then align the obtain files with MAFFT and run `get_consensus.py` to get a combined sequence of the overlapped AHE region.
+Then align the obtain files with MAFFT and run `get_consensus_AHE.py` to get a combined sequence of the overlapped AHE region.
 
 **Clustered, overlap-merged locus count: 499**
 
@@ -84,7 +84,7 @@ After merging by transcript, double check locus overlap. For that, combine the o
 
 ### 4.2 merge loci via consensus
 
-As in step 2.2, combine overlapped loci into a single file, align it and run `get_consensus.py` to produce a combine sequence. 
+As in step 2.2, combine overlapped loci into a single file, align it and run `get_consensus_AHE.py` to produce a combine sequence. 
 
 **Clustered, overlap-merged, transcript-merged, overlap-merged locus count: 400**
 
